@@ -5,6 +5,7 @@ var del = require('del');
 var glob = require('glob');
 var gulp = require('gulp');
 var path = require('path');
+var lazypipe = require('lazypipe');
 var _ = require('lodash');
 var $ = require('gulp-load-plugins')({ lazy: true });
 
@@ -212,11 +213,11 @@ gulp.task('build', ['optimize', 'images', 'fonts'], function() {
 gulp.task('optimize', ['inject', 'test'], function() {
   log('Optimizing the js, css, and html');
 
-  var assets = $.useref.assets({ searchPath: './' });
   // Filters are named for the gulp-useref path
   var cssFilter = $.filter('**/*.css');
   var jsAppFilter = $.filter('**/' + config.optimized.app);
   var jslibFilter = $.filter('**/' + config.optimized.lib);
+  var notIndexFilter = $.filter(['**/*', '!**/index.html']);
 
   var templateCache = config.temp + config.templateCache.file;
 
@@ -224,7 +225,8 @@ gulp.task('optimize', ['inject', 'test'], function() {
     .src(config.index)
     .pipe($.plumber())
     .pipe(inject(templateCache, 'templates'))
-    .pipe(assets) // Gather all assets from the html with useref
+    // Apply the concat and file replacement with useref
+    .pipe($.useref({searchPath: './'}, lazypipe().pipe($.sourcemaps.init, {loadMaps: true})))
     // Get the css
     .pipe(cssFilter)
     .pipe($.minifyCss())
@@ -240,12 +242,12 @@ gulp.task('optimize', ['inject', 'test'], function() {
     .pipe($.uglify()) // another option is to override wiredep to use min files
     .pipe(jslibFilter.restore())
     // Take inventory of the file names for future rev numbers
+    .pipe(notIndexFilter)
     .pipe($.rev())
-    // Apply the concat and file replacement with useref
-    .pipe(assets.restore())
-    .pipe($.useref())
+    .pipe(notIndexFilter.restore())
     // Replace the file names in the html with rev numbers
     .pipe($.revReplace())
+    .pipe($.sourcemaps.write('.'))
     .pipe(gulp.dest(config.build));
 });
 
